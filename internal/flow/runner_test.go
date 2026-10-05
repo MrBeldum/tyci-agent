@@ -275,6 +275,29 @@ func TestRunner_PanicMarksFailed(t *testing.T) {
 	}
 }
 
+func TestRunner_AskPausesRun(t *testing.T) {
+	wf := &Workflow{Name: "demo", Start: "ask", States: map[string]State{
+		"ask": {Ask: "needs a human"},
+		"end": {End: true},
+	}}
+	store := &memStore{}
+	r := &Runner{WF: wf, Store: store}
+	st := newRun("ask")
+	err := r.Run(context.Background(), st)
+	if !errors.Is(err, ErrPaused) {
+		t.Fatalf("err = %v, want ErrPaused", err)
+	}
+	if st.Status != "paused" {
+		t.Fatalf("status = %q, want paused", st.Status)
+	}
+	if st.Ask == nil || st.Ask.Message != "needs a human" {
+		t.Fatalf("ask = %+v, want message %q", st.Ask, "needs a human")
+	}
+	if store.saves == 0 {
+		t.Fatal("expected Store.Save to be called on pause")
+	}
+}
+
 func TestRunner_SkipHookCalledOnlyWhenNoAgentRan(t *testing.T) {
 	checksOnly := &Workflow{Name: "demo", Start: "a", States: map[string]State{
 		"a":   {Check: "x.sh", On: map[string]string{"go": "end"}},
