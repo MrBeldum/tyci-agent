@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -17,6 +18,7 @@ func envMap(env []string) map[string]string {
 
 func TestBuildCheckEnv_ContainsAllTyciVars(t *testing.T) {
 	t.Setenv("GH_TOKEN", "tok123")
+	t.Setenv("GITHUB_TOKEN", "ghtok456")
 	st := &RunState{
 		Repo:     "o/r",
 		Issue:    160,
@@ -28,15 +30,17 @@ func TestBuildCheckEnv_ContainsAllTyciVars(t *testing.T) {
 	}
 	env := envMap(buildCheckEnv(st, State{}, "/tmp/run"))
 	for k, want := range map[string]string{
-		"TYCI_REPO":     "o/r",
-		"TYCI_ISSUE":    "160",
-		"TYCI_BRANCH":   "issue-160",
-		"TYCI_WORKTREE": "/tmp/wt",
-		"TYCI_RUN_DIR":  "/tmp/run",
-		"TYCI_STATE":    "ci",
-		"TYCI_VISIT":    "2",
-		"TYCI_PR":       "171",
-		"GH_TOKEN":      "tok123",
+		"TYCI_REPO":           "o/r",
+		"TYCI_ISSUE":          "160",
+		"TYCI_BRANCH":         "issue-160",
+		"TYCI_DEFAULT_BRANCH": "",
+		"TYCI_WORKTREE":       "/tmp/wt",
+		"TYCI_RUN_DIR":        "/tmp/run",
+		"TYCI_STATE":          "ci",
+		"TYCI_VISIT":          "2",
+		"TYCI_PR":             "171",
+		"GH_TOKEN":            "tok123",
+		"GITHUB_TOKEN":        "ghtok456",
 	} {
 		if env[k] != want {
 			t.Errorf("%s = %q, want %q (env %v)", k, env[k], want, env)
@@ -46,6 +50,11 @@ func TestBuildCheckEnv_ContainsAllTyciVars(t *testing.T) {
 		if _, ok := env[k]; !ok {
 			t.Errorf("expected %s in env", k)
 		}
+	}
+	// TYCI_DEFAULT_BRANCH is empty until wired, but the key must be present:
+	// a map lookup alone cannot tell a dropped var from an empty one.
+	if _, ok := env["TYCI_DEFAULT_BRANCH"]; !ok {
+		t.Error("expected TYCI_DEFAULT_BRANCH in env")
 	}
 }
 
@@ -67,5 +76,26 @@ func TestBuildCheckEnv_DropsOtherParentVars(t *testing.T) {
 	env := envMap(buildCheckEnv(st, State{}, "/tmp/run"))
 	if _, ok := env["SECRET_X"]; ok {
 		t.Fatal("SECRET_X leaked into check env")
+	}
+}
+
+func TestBuildCheckEnv_TokensAbsentWhenUnset(t *testing.T) {
+	for _, k := range []string{"GH_TOKEN", "GITHUB_TOKEN"} {
+		k := k
+		if v, ok := os.LookupEnv(k); ok {
+			t.Cleanup(func() { _ = os.Setenv(k, v) })
+		} else {
+			t.Cleanup(func() { _ = os.Unsetenv(k) })
+		}
+		if err := os.Unsetenv(k); err != nil {
+			t.Fatalf("Unsetenv(%s): %v", k, err)
+		}
+	}
+	st := &RunState{Current: "a", Visits: map[string]int{"a": 1}}
+	env := envMap(buildCheckEnv(st, State{}, "/tmp/run"))
+	for _, k := range []string{"GH_TOKEN", "GITHUB_TOKEN"} {
+		if _, ok := env[k]; ok {
+			t.Errorf("%s present although unset in parent", k)
+		}
 	}
 }
