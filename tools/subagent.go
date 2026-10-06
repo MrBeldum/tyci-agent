@@ -528,8 +528,8 @@ func (s *streamingCollector) flushPartial() {
 // this collector — rather than a separate one — is the actual Sink that
 // drove agent.Run.
 func (s *streamingCollector) CollectedText() string {
-	s.collector.mu.Lock()
-	defer s.collector.mu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.text.String()
 }
 
